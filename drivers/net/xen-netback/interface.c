@@ -628,13 +628,13 @@ int xenvif_connect_ctrl(struct xenvif *vif, grant_ref_t ring_ref,
 			unsigned int evtchn)
 {
 	struct net_device *dev = vif->dev;
+	struct xenbus_device *xendev = xenvif_to_xenbus_device(vif);
 	void *addr;
 	struct xen_netif_ctrl_sring *shared;
 	RING_IDX rsp_prod, req_prod;
 	int err;
 
-	err = xenbus_map_ring_valloc(xenvif_to_xenbus_device(vif),
-				     &ring_ref, 1, &addr);
+	err = xenbus_map_ring_valloc(xendev, &ring_ref, 1, &addr);
 	if (err)
 		goto err;
 
@@ -648,7 +648,7 @@ int xenvif_connect_ctrl(struct xenvif *vif, grant_ref_t ring_ref,
 	if (req_prod - rsp_prod > RING_SIZE(&vif->ctrl))
 		goto err_unmap;
 
-	err = bind_interdomain_evtchn_to_irq_lateeoi(vif->domid, evtchn);
+	err = bind_interdomain_evtchn_to_irq_lateeoi(xendev, evtchn);
 	if (err < 0)
 		goto err_unmap;
 
@@ -671,8 +671,7 @@ err_deinit:
 	vif->ctrl_irq = 0;
 
 err_unmap:
-	xenbus_unmap_ring_vfree(xenvif_to_xenbus_device(vif),
-				vif->ctrl.sring);
+	xenbus_unmap_ring_vfree(xendev, vif->ctrl.sring);
 	vif->ctrl.sring = NULL;
 
 err:
@@ -717,6 +716,7 @@ int xenvif_connect_data(struct xenvif_queue *queue,
 			unsigned int tx_evtchn,
 			unsigned int rx_evtchn)
 {
+	struct xenbus_device *dev = xenvif_to_xenbus_device(queue->vif);
 	struct task_struct *task;
 	int err;
 
@@ -753,7 +753,7 @@ int xenvif_connect_data(struct xenvif_queue *queue,
 	if (tx_evtchn == rx_evtchn) {
 		/* feature-split-event-channels == 0 */
 		err = bind_interdomain_evtchn_to_irqhandler_lateeoi(
-			queue->vif->domid, tx_evtchn, xenvif_interrupt, 0,
+			dev, tx_evtchn, xenvif_interrupt, 0,
 			queue->name, queue);
 		if (err < 0)
 			goto err;
@@ -764,7 +764,7 @@ int xenvif_connect_data(struct xenvif_queue *queue,
 		snprintf(queue->tx_irq_name, sizeof(queue->tx_irq_name),
 			 "%s-tx", queue->name);
 		err = bind_interdomain_evtchn_to_irqhandler_lateeoi(
-			queue->vif->domid, tx_evtchn, xenvif_tx_interrupt, 0,
+			dev, tx_evtchn, xenvif_tx_interrupt, 0,
 			queue->tx_irq_name, queue);
 		if (err < 0)
 			goto err;
@@ -774,7 +774,7 @@ int xenvif_connect_data(struct xenvif_queue *queue,
 		snprintf(queue->rx_irq_name, sizeof(queue->rx_irq_name),
 			 "%s-rx", queue->name);
 		err = bind_interdomain_evtchn_to_irqhandler_lateeoi(
-			queue->vif->domid, rx_evtchn, xenvif_rx_interrupt, 0,
+			dev, rx_evtchn, xenvif_rx_interrupt, 0,
 			queue->rx_irq_name, queue);
 		if (err < 0)
 			goto err;
